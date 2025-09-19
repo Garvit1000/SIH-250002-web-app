@@ -47,25 +47,105 @@ export default function DashboardPage() {
 
   const handleCreateDID = async () => {
     try {
+      // For now, just mark DID as created in Firebase
+      // In a full implementation, you might want to create the DID separately
       await updateDoc(doc(db, 'users', user.uid), {
         didCreated: true,
         didCreatedAt: new Date().toISOString()
       });
       fetchUserData();
+      alert('DID created successfully! You can now issue Verifiable Credentials.');
     } catch (error) {
       console.error('Error creating DID:', error);
+      alert('Error creating DID. Please try again.');
     }
   };
 
   const handleIssueVC = async () => {
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        vcIssued: true,
-        vcIssuedAt: new Date().toISOString()
+      // Get user data with required fields for VC (use phone as emergency contact if emergencyContact not available)
+      const emergencyContact = userData?.emergencyContact || userData?.phone;
+      
+      if (!userData?.fullName || !userData?.nationality || !emergencyContact) {
+        alert('Please complete your profile with full name, nationality, and phone number before issuing VC');
+        return;
+      }
+
+      console.log('Issuing VC with enhanced features:', {
+        fullName: userData.fullName,
+        nationality: userData.nationality,
+        emergencyContact: emergencyContact
       });
-      fetchUserData();
+
+      // Call our enhanced VC API with QR and PDF generation
+      const response = await fetch('/api/issue-vc', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fullName: userData.fullName,
+          nationality: userData.nationality,
+          emergencyContact: emergencyContact,
+          userId: user.uid, // Use Firebase user ID
+          options: {
+            qrType: 'presentation',
+            baseUrl: window.location.origin
+          }
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Update Firebase with enhanced VC data
+        await updateDoc(doc(db, 'users', user.uid), {
+          vcIssued: true,
+          vcIssuedAt: new Date().toISOString(),
+          vcData: result.credential,
+          issuerDid: result.issuerDid,
+          touristDid: result.touristDid,
+          // Store new VC features
+          vcId: result.vcId,
+          vcQRCode: result.qrCode,
+          vcPDFUrl: result.pdf.downloadUrl,
+          vcVerifyUrl: result.verification.verifyUrl,
+          vcAccessToken: result.accessToken
+        });
+        
+        fetchUserData();
+        
+        // Enhanced success message
+        const successMessage = `✅ Verifiable Credential issued successfully!
+        
+🆔 VC ID: ${result.vcId}
+🔗 Issuer DID: ${result.issuerDid}
+👤 Tourist DID: ${result.touristDid}
+📱 QR Code: Generated
+📄 PDF: Ready for download
+🔐 Verification URL: Available
+
+Features:
+• QR code for instant verification
+• PDF document with embedded QR
+• Firebase storage for secure access
+• JWT token for verification
+
+You can now generate documents and verify your credentials!`;
+
+        alert(successMessage);
+        
+        // Optionally auto-navigate to generate page
+        if (confirm('Would you like to go to the document generation page now?')) {
+          setActiveTab('generate');
+        }
+      } else {
+        console.error('VC issuance failed:', result.error);
+        alert(`Failed to issue VC: ${result.message}`);
+      }
     } catch (error) {
       console.error('Error issuing VC:', error);
+      alert('Error issuing Verifiable Credential. Please try again.');
     }
   };
 
@@ -106,32 +186,33 @@ export default function DashboardPage() {
       {/* Action Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <ActionCard
+          title="Create DID"
+          description="Generate your decentralized identity first"
+          icon={Shield}
+          buttonText="Create DID"
+          onAction={handleCreateDID}
+          disabled={false}
+          completed={userData?.didCreated}
+        />
+        
+        <ActionCard
+          title="Issue Verifiable Credential"
+          description="Issue VC with QR code, PDF generation & Firebase storage"
+          icon={FileText}
+          buttonText="Issue Enhanced VC"
+          onAction={handleIssueVC}
+          disabled={!userData?.didCreated}
+          completed={userData?.vcIssued}
+        />
+        
+        <ActionCard
           title="Generate Grid"
           description="Create your identity grid system"
           icon={Grid3x3}
           buttonText="Generate Grid"
           onAction={() => console.log('Generate Grid')}
-          completed={userData?.didCreated}
-        />
-        
-        <ActionCard
-          title="Create DID / Issue VC"
-          description="Generate your decentralized identity and verifiable credentials"
-          icon={Shield}
-          buttonText="Create DID & VC"
-          onAction={handleCreateDID}
-          disabled={!userData?.didCreated}
-          completed={userData?.didCreated && userData?.vcIssued}
-        />
-        
-        <ActionCard
-          title="Non-Custodial Issuance"
-          description="Issue credentials without third-party custody"
-          icon={FileText}
-          buttonText="Issue Credentials"
-          onAction={handleIssueVC}
-          disabled={!userData?.didCreated}
-          completed={userData?.vcIssued}
+          disabled={!userData?.vcIssued}
+          completed={false}
         />
         
         <ActionCard
@@ -176,28 +257,35 @@ export default function DashboardPage() {
             <User className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="font-medium">Full Name</p>
-              <p className="text-muted-foreground">{userData?.phone}</p>
+              <p className="text-muted-foreground">{userData?.fullName || 'Not provided'}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <Phone className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <p className="font-medium">Phone / Emergency Contact</p>
+              <p className="text-muted-foreground">{userData?.phone || userData?.emergencyContact || 'Not provided'}</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">
             <MapPin className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="font-medium">Address</p>
-              <p className="text-muted-foreground">{userData?.address}</p>
+              <p className="text-muted-foreground">{userData?.address || 'Not provided'}</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">
             <Calendar className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="font-medium">Date of Birth</p>
-              <p className="text-muted-foreground">{userData?.dateOfBirth}</p>
+              <p className="text-muted-foreground">{userData?.dateOfBirth || 'Not provided'}</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">
             <Flag className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="font-medium">Nationality</p>
-              <p className="text-muted-foreground">{userData?.nationality}</p>
+              <p className="text-muted-foreground">{userData?.nationality || 'Not provided'}</p>
             </div>
           </div>
         </div>

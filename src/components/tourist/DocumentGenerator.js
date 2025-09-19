@@ -11,6 +11,14 @@ const DocumentGenerator = ({ userData, onGenerate }) => {
 
   const documents = [
     {
+      id: 'verifiable_credential',
+      title: 'Verifiable Credential',
+      description: 'Issue blockchain-based verifiable credential',
+      icon: FileText,
+      required: ['fullName', 'nationality', 'emergencyContact'],
+      isVC: true
+    },
+    {
       id: 'identity_certificate',
       title: 'Identity Certificate',
       description: 'Official identity verification document',
@@ -44,13 +52,72 @@ const DocumentGenerator = ({ userData, onGenerate }) => {
     setGenerating({ ...generating, [docId]: true });
     
     try {
-      // Simulate document generation
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const doc = documents.find(d => d.id === docId);
       
-      setGenerated({ ...generated, [docId]: true });
-      onGenerate && onGenerate(docId);
+      if (doc?.isVC) {
+        // Handle Verifiable Credential issuance with enhanced features
+        const response = await fetch('/api/issue-vc', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fullName: userData.fullName,
+            nationality: userData.nationality,
+            emergencyContact: userData.emergencyContact || userData.phone,
+            userId: userData.userId || `user_${Date.now()}`,
+            options: {
+              qrType: 'presentation', // or 'firebase'
+              baseUrl: window.location.origin
+            }
+          })
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          console.log('VC issued successfully with QR and PDF:', result);
+          
+          // Store VC info for later use
+          setGenerated({
+            ...generated,
+            [docId]: {
+              success: true,
+              vcId: result.vcId,
+              userId: result.userId,
+              qrCode: result.qrCode,
+              pdfDownloadUrl: result.pdf.downloadUrl,
+              verifyUrl: result.verification.verifyUrl,
+              accessToken: result.accessToken
+            }
+          });
+
+          // Show success message with options
+          const message = `✅ Verifiable Credential issued successfully!
+          
+🆔 VC ID: ${result.vcId}
+🔗 Issuer DID: ${result.issuerDid}
+👤 Tourist DID: ${result.touristDid}
+📱 QR Code: Generated (${result.qrCode.type})
+📄 PDF: Ready for download
+🔐 Verification: ${result.verification.verifyUrl}
+
+You can now download the PDF with embedded QR code or verify the credential using the QR code.`;
+          
+          alert(message);
+          onGenerate && onGenerate(docId, result);
+        } else {
+          throw new Error(result.message || 'Failed to issue VC');
+        }
+      } else {
+        // Simulate document generation for other documents
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        setGenerated({ ...generated, [docId]: true });
+        onGenerate && onGenerate(docId);
+      }
     } catch (error) {
       console.error('Error generating document:', error);
+      alert(`Error: ${error.message}`);
     } finally {
       setGenerating({ ...generating, [docId]: false });
     }
@@ -60,6 +127,12 @@ const DocumentGenerator = ({ userData, onGenerate }) => {
     return doc.required.every(field => {
       if (field === 'touristInfo') {
         return userData?.touristInfoCaptured;
+      }
+      if (field === 'emergencyContact') {
+        return userData?.emergencyContact || userData?.phone;
+      }
+      if (field === 'didCreated' || field === 'vcIssued') {
+        return userData?.[field];
       }
       return userData?.[field];
     });
@@ -110,29 +183,70 @@ const DocumentGenerator = ({ userData, onGenerate }) => {
                     Requirements: {doc.required.map(req => req.replace(/([A-Z])/g, ' $1').toLowerCase()).join(', ')}
                   </div>
                   
-                  <Button
-                    onClick={() => handleGenerate(doc.id)}
-                    disabled={!ready || isGenerating}
-                    variant={isGenerated ? "outline" : "default"}
-                    className="w-full"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Clock className="h-4 w-4 mr-2 animate-spin" />
-                        Generating...
-                      </>
-                    ) : isGenerated ? (
-                      <>
-                        <Download className="h-4 w-4 mr-2" />
-                        Download PDF
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="h-4 w-4 mr-2" />
-                        Generate PDF
-                      </>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => handleGenerate(doc.id)}
+                      disabled={!ready || isGenerating}
+                      variant={isGenerated ? "outline" : "default"}
+                      className="w-full"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <Clock className="h-4 w-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : isGenerated ? (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          Download PDF
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="h-4 w-4 mr-2" />
+                          Generate PDF
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Additional actions for VC documents */}
+                    {doc.isVC && isGenerated && generated[doc.id]?.pdfDownloadUrl && (
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => window.open(generated[doc.id].pdfDownloadUrl, '_blank')}
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                        >
+                          <Download className="h-3 w-3 mr-1" />
+                          PDF
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            if (generated[doc.id]?.qrCode?.dataURL) {
+                              // Create a temporary link to download QR code
+                              const link = document.createElement('a');
+                              link.href = generated[doc.id].qrCode.dataURL;
+                              link.download = `qr_code_${generated[doc.id].vcId}.png`;
+                              link.click();
+                            }
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                        >
+                          📱 QR
+                        </Button>
+                        <Button
+                          onClick={() => window.open(generated[doc.id].verifyUrl, '_blank')}
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                        >
+                          🔐 Verify
+                        </Button>
+                      </div>
                     )}
-                  </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

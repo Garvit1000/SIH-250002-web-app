@@ -6,15 +6,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/firebase';
 import {Button} from '@/components/ui/button';
-import { 
-  Home, 
-  User, 
-  FileText, 
-  Camera, 
-  Download, 
+import {
+  Home,
+  User,
+  FileText,
+  Camera,
+  Download,
   LogOut,
   Menu,
-  X 
+  X,
+  Shield
 } from 'lucide-react';
 
 const DashboardNav = ({ activeTab, onTabChange, userEmail }) => {
@@ -24,9 +25,10 @@ const DashboardNav = ({ activeTab, onTabChange, userEmail }) => {
   const navItems = [
     { id: 'overview', label: 'Overview', icon: Home, href: '/dashboard' },
     { id: 'profile', label: 'Profile', icon: User, href: '/dashboard/profile' },
-    { id: 'documents', label: 'Documents', icon: FileText, href: '/dashboard' },
+    { id: 'credentials', label: 'Credentials', icon: Shield, href: '/dashboard/credentials' },
     { id: 'capture', label: 'Capture Info', icon: Camera, href: '/dashboard/capture' },
     { id: 'generate', label: 'Generate Files', icon: Download, href: '/dashboard/generate' },
+    { id: 'documents', label: 'Documents', icon: FileText, href: '/dashboard' },
   ];
 
   const handleSignOut = async () => {
