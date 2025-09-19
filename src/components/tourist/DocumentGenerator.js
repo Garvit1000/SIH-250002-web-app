@@ -236,14 +236,19 @@ You can now download the PDF with embedded QR code or verify the credential usin
                         >
                           📱 QR
                         </Button>
-                        <Button
-                          onClick={() => window.open(generated[doc.id].verifyUrl, '_blank')}
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                        >
-                          🔐 Verify
-                        </Button>
+                          <Button
+                              onClick={() => {
+                                  const token = generated[doc.id]?.accessToken;
+                                  if (token) {
+                                      window.open(`/verify?token=${token}`, '_blank');
+                                  }
+                              }}
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                          >
+                              🔐 Verify
+                          </Button>
                       </div>
                     )}
                   </div>
